@@ -1,0 +1,109 @@
+# This Works is placed under the terms of the Copyright Less License,
+# see file COPYRIGHT.CLL.  USE AT OWN RISK, ABSOLUTELY NO WARRANTY.
+# Read: Free as free beer, free speech, free baby.
+# Copyrighting babies is slavery.
+
+# This is version 2023-05-03 of a generic Makefile for GCC/GNU/Linux environments which:
+#
+# - Compiles all *.c to a bin accordingly
+# - Declutters error output in case you use something like pp-foreach
+# - Most complex configuration can be kept in the sources.
+# - Here you only need to give the default flags like DEBUG and INSTALL_PREFIX
+#
+# Unluckily, this is unbearable complex to express.  And error prone.
+# And wrong.  Because options should be per-.c-file not global.
+# Also it does not work for all types of dependencies,
+# so recompilation might not be done if needed,
+# or recompilation is done too often.  Sigh.
+#
+# However for small straight-forward projects, this Makefile is generic enough
+# See also: https://github.com/hilbix/fix/blob/master/home/vimrc
+
+# BEGIN CONFIGURATION
+# Override this to install somewhere else
+INSTALL_PREFIX=/usr/local
+# Set Debug flags (real debugging usually requires -O0)
+DEBUG=-g
+# Set Optimization flags
+OPTIMIZE=-O3
+# END CONFIGURATION
+# Rest usually should not need changes
+
+SRCS=$(wildcard *.c)
+BINS=$(SRCS:.c=)
+LIBS=$(shell sed -n 's/^[	 /]*\*[*	 ]*LIBS:[	 ]*//p' $(SRCS))
+GCCFLAGS=$(shell sed -n 's/^[	 /]*\*[*	 ]*GCCFLAGS:[	 ]*//p' $(SRCS))
+DEBIAN=$(shell sed -n 's/^[	 /]*\*[*	 ]*DEBIAN:[	 ]*//p' $(SRCS) | tr ' ' '\n' | sort -u)
+CFLAGS=-Wall $(OPTIMIZE) $(DEBUG) $(shell bash -xc 'pkg-config --cflags -- $(LIBS)') $(GCCFLAGS)
+LDLIBS=$(shell bash -xc 'pkg-config --libs -- $(LIBS)')
+
+TMPDIR := .tmp
+
+.PHONY:	love
+love:	all
+
+.PHONY:	all
+all:	$(BINS)
+
+# Hello World: Debug extracted configuration
+.PHONY:	hw
+hw:
+	@/bin/bash -c 'printf "%15q=%s\\n" "$$@"' - INSTALL_PREFIX '$(INSTALL_PREFIX)' DEBUG '$(DEBUG)' OPTIMIZE '$(OPTIMIZE)' SRCS '$(SRCS)' LIBS '$(LIBS)' GCCFLAGS '$(GCCFLAGS)' LDLIBS '$(LDLIBS)' CFLAGS '$(CFLAGS)' SRCS '$(SRCS)' BINS '$(BINS)'
+
+# Do not depend on $(BINS), as this usually is run with sudo
+.PHONY:	install
+install:
+	install -s $(BINS) $(INSTALL_PREFIX)/bin/
+
+.PHONY:	clean
+clean:
+	$(RM) $(BINS)
+	$(RM) -r $(TMPDIR)
+
+.PHONY:	debian
+debian:
+	sudo apt-get install $(APT_INSTALL_FLAGS) -- $(DEBIAN)
+
+.PHONY:	test
+test:	all
+	./Test.sh
+
+# make debug: assumes you only have one binary (so one *.c)
+.PHONY:	debug
+debug:	all
+	DEBUG=: /usr/bin/gdb -q -nx -nw -ex r --args '$(BINS)' $(DEBUG_ARGS)
+
+# The usual way to compile things is to use some intermediate directory for all intermediate files.
+# This way the main directory is not cluttered with things you nead to add to ./.gitignore
+# and the clean rule stays relatively clean.
+#
+# AFAICS make is not good suited for this task.  Putting intermediates like
+#	.tmp/%.d and .tmp/%.o
+# needs special rules for make to grok their position.  Mainly because you cannot do
+#	%: $(TMPDIR)/%.o
+#
+# In this case here we are a bit of lucky, because we preprocess the %.c into .tmp/%.c
+# which needs a special rule because there is no built in preprocessing step.
+# Hence we only needs to re-invent the wheel for the link rule:
+
+$(BINS):	$(SRCS:%.c=$(TMPDIR)/%.o)
+	$(CC) $(LDFLAGS) $(TMPDIR)/$@.o -o $@ $(LDLIBS)
+
+# This extra step is needed to be able to output just a single error line using pp-foreach/ or similar.
+# Without this hack it might output thousands of error history lines can become unbearable slow.
+#
+# It also creates the .tmp/*.d entries for Makefile dependency.
+# For this to work without re-inventing the wheel twice, the .PRECIOUS hack is needed:
+.PRECIOUS:	$(TMPDIR)/%.c
+$(TMPDIR)/%.c:	%.c Makefile | $(TMPDIR)
+	cpp -MT $@ -MMD -MP -MF $(TMPDIR)/$*.d $< -o $@
+
+$(TMPDIR):
+	@mkdir -p $@
+
+# Include generated Makefile dependencies
+# Does not work without -----v----- this ; hack
+$(TMPDIR)/%.d:	$(TMPDIR)/%.c;
+
+include $(SRCS:%.c=$(TMPDIR)/%.d)
+
