@@ -28,7 +28,7 @@ Note:
 
 WTF why?
 
-- Because I already have written zillion versions of nearly the same Makefile ofer the decades
+- Because I already have written zillion versions of nearly the same Makefile over the decades
 - This here bundles these for easy update and reuse in future to make my life easier
 - Probably I will add other common stuff here, too
 
