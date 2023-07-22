@@ -36,6 +36,7 @@ GCCFLAGS=$(shell sed -n 's/^[	 /]*\*[*	 ]*GCCFLAGS:[	 ]*//p' $(SRCS))
 DEBIAN=$(shell sed -n 's/^[	 /]*\*[*	 ]*DEBIAN:[	 ]*//p' $(SRCS) | tr ' ' '\n' | sort -u)
 CFLAGS=-Wall $(OPTIMIZE) $(DEBUG) $(shell bash -xc 'pkg-config --cflags -- $(LIBS)') $(GCCFLAGS)
 LDLIBS=$(shell bash -xc 'pkg-config --libs -- $(LIBS)')
+SOURCE_DATE_EPOCH=$(shell git show -s --format=%ct HEAD)
 
 TMPDIR := .tmp
 
